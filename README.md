@@ -406,19 +406,3 @@ Skor_Pengabdian = min( (Pengabdian_year / D_PENGABDIAN) * 100 , 100 )
 IKD = 0.40*Skor_Mengajar + 0.25*Skor_Penelitian + 0.25*Skor_Publikasi + 0.10*Skor_Pengabdian
 
 Alignment% = 100 * N_matched / (Penelitian_year + Publikasi_year)  (if denom>0)
-
-
----
-
-Penutup
-
-Dokumen ini siap dimasukkan ke repositori sebagai script.md. Jika Anda ingin, saya dapat:
-
-menyediakan versi PDF atau DOCX,
-
-menambahkan nilai default denominators & bobot ke file JSON konfigurasi dan menerapkannya otomatis di app.py,
-
-menambahkan bagian audit trail & contoh dataset yang dipakai dalam perhitungan.
-
-
-Mau saya lanjutkan ke salah satu hal di atas?
