@@ -33,21 +33,59 @@ if 'logged_in' not in st.session_state:
     st.session_state.fakultas = None
     st.session_state.prodi = None
 
+# ---------------- Faculty & Programs (aligned to esaunggul.ac.id public lists) ----------------
+# This mapping is derived from public pages of https://esaunggul.ac.id (program/faculty lists).
+FACULTIES_PRODI = {
+    "Fakultas Ekonomi dan Bisnis": [
+        "Manajemen", "Akuntansi Sektor Bisnis", "Magister Manajemen", "Magister Akuntansi", "Magister Administrasi Publik", "Doktor Ilmu Manajemen"
+    ],
+    "Fakultas Teknik": [
+        "Teknik Industri", "Perencanaan Wilayah & Kota", "Survei dan Pemetaan", "Teknik Sipil", "Teknik Mesin", "Teknik Elektro"
+    ],
+    "Fakultas Desain & Industri Kreatif": [
+        "Desain Komunikasi Visual", "Desain Produk", "Desain Interior"
+    ],
+    "Fakultas Ilmu-Ilmu Kesehatan": [
+        "Kesehatan Masyarakat", "Ilmu Gizi", "Ilmu Keperawatan", "Profesi Ners", "Rekam Medis", "Manajemen Informasi Kesehatan", "Farmasi", "Bioteknologi"
+    ],
+    "Fakultas Fisioterapi": [
+        "Fisioterapi", "Profesi Fisioterapis", "Magister Fisioterapi"
+    ],
+    "Fakultas Ilmu Komunikasi": [
+        "Marketing Communication", "Jurnalistik", "Hubungan Masyarakat", "Broadcasting"
+    ],
+    "Fakultas Ilmu Komputer": [
+        "Teknik Informatika", "Sistem Informasi", "Teknik Informatika (PJJ)", "Magister Ilmu Komputer"
+    ],
+    "Fakultas Hukum": [
+        "Ilmu Hukum", "Magister Ilmu Hukum"
+    ],
+    "Fakultas Psikologi": [
+        "Psikologi"
+    ],
+    "Fakultas Keguruan dan Ilmu Pendidikan": [
+        "Pendidikan Bahasa Inggris", "Pendidikan Guru SD (PGSD)"
+    ]
+}
+
 # ---------------- Dummy data generator (with better variance) ----------------
 @st.cache_data
 def generate_dummy_data(seed: int = 42):
     """
-    Generate dummy data with enough variance so not everyone has max scores.
-    Reduced probabilities/means for publications/penelitian to create spread.
+    Generate dummy data using FACULTIES_PRODI mapping (so faculty/prodi reflect the real site).
+    Produces:
+      - dosen_df (20 dosen)
+      - performance_df (12 months per dosen)
+      - verification_df (15 items)
+      - csv_paths (if saving succeeded)
     """
     np.random.seed(seed)
-    faculties = {
-        "Teknik": ["Informatika", "Sipil", "Arsitektur"],
-        "Ekonomi": ["Manajemen", "Akuntansi"],
-        "Hukum": ["Ilmu Hukum"],
-        "Kedokteran": ["Kedokteran Umum", "Keperawatan"],
-        "Ilmu Sosial": ["Komunikasi", "Psikologi"]
-    }
+
+    # flatten faculty names
+    faculty_names = list(FACULTIES_PRODI.keys())
+
+    # sample prodi choices are taken from mapping
+    prodi_per_fak = FACULTIES_PRODI
 
     nama_list = [
         "Andi", "Budi", "Citra", "Dewi", "Eka", "Fajar", "Gita", "Hendra", "Indra", "Joko",
@@ -56,10 +94,9 @@ def generate_dummy_data(seed: int = 42):
 
     dosen_list = []
     ids = list(range(1, 21))
-    faculty_names = list(faculties.keys())
     for i, id_ in enumerate(ids, start=1):
         fak = np.random.choice(faculty_names)
-        prodi = np.random.choice(faculties[fak])
+        prodi = np.random.choice(prodi_per_fak[fak])
         dosen = {
             "id": int(id_),
             "nama": f"Dr. {nama_list[i-1]}",
@@ -74,26 +111,23 @@ def generate_dummy_data(seed: int = 42):
 
     dosen_df = pd.DataFrame(dosen_list)
 
-    # Performance data with controlled variance
+    # Performance data with controlled variance so not all maximal
     performance_rows = []
     for dosen_id in dosen_df['id']:
-        # per-dosen baseline to vary across dosen
-        base_sks = np.random.randint(8,14)  # baseline monthly-ish
-        base_penelitian_rate = np.random.uniform(0.4,1.2)  # mean for poisson
-        base_pengabdian_rate = np.random.uniform(0.2,0.8)
-        pub_prob = np.random.uniform(0.05,0.35)  # chance of publication per month
+        base_sks = np.random.randint(8,14)
+        base_penelitian_rate = np.random.uniform(0.3,1.2)
+        base_pengabdian_rate = np.random.uniform(0.1,0.8)
+        pub_prob = np.random.uniform(0.05,0.35)
 
         for bulan in range(1,13):
             row = {
                 "dosen_id": int(dosen_id),
                 "bulan": int(bulan),
                 "tahun": 2024,
-                # monthly SKS (so annual ~12x)
-                "mengajar_sks": int(max(4, np.random.poisson(base_sks/2) + np.random.randint(0,3))),
+                "mengajar_sks": int(max(3, np.random.poisson(base_sks/2) + np.random.randint(0,3))),
                 "penelitian": int(np.random.poisson(base_penelitian_rate)),
                 "pengabdian": int(np.random.poisson(base_pengabdian_rate)),
                 "publikasi": int(np.random.binomial(1, pub_prob)),
-                # angka kredit random but correlated with SKS + pub + penelitian
                 "angka_kredit": round(max(2.0, np.random.normal(loc=6 + (base_sks/4) + np.random.randint(0,3), scale=2.5)),2)
             }
             performance_rows.append(row)
@@ -121,7 +155,6 @@ def generate_dummy_data(seed: int = 42):
 
     verification_df = pd.DataFrame(verif_rows)
 
-    # Save CSV if possible
     csv_paths = {}
     try:
         dosen_csv = "/mnt/data/dummy_dosen_20.csv"
@@ -136,6 +169,7 @@ def generate_dummy_data(seed: int = 42):
 
     return dosen_df, performance_df, verification_df, csv_paths
 
+# ---------------- Safe loader into session ----------------
 def load_dummy_to_session(seed: int = 42):
     dosen_df, performance_df, verification_df, csv_paths = generate_dummy_data(seed)
     st.session_state.dosen_data = dosen_df
@@ -143,20 +177,21 @@ def load_dummy_to_session(seed: int = 42):
     st.session_state.verification_queue = verification_df
     st.session_state.dummy_csv_paths = csv_paths
 
+# ensure data exists
 if 'dosen_data' not in st.session_state:
     load_dummy_to_session()
 
 # ---------------- Demo users ----------------
 USERS = {
-    'dosen1': {'password': 'dosen123','role': 'Dosen','name': 'Dr. Dosen 1','id': 1,'fakultas':'Teknik','prodi':'Informatika'},
-    'dosen2': {'password': 'dosen123','role': 'Dosen','name': 'Dr. Dosen 2','id': 2,'fakultas':'Teknik','prodi':'Sipil'},
-    'kaprodi1': {'password': 'kaprodi123','role': 'Kaprodi','name': 'Dr. Kaprodi Informatika','id': None,'fakultas':'Teknik','prodi':'Informatika'},
-    'dekan1': {'password': 'dekan123','role': 'Dekan','name': 'Prof. Dekan Teknik','id': None,'fakultas':'Teknik','prodi': None},
+    'dosen1': {'password': 'dosen123','role': 'Dosen','name': 'Dr. Dosen 1','id': 1,'fakultas':'Fakultas Teknik','prodi':'Teknik Informatika'},
+    'dosen2': {'password': 'dosen123','role': 'Dosen','name': 'Dr. Dosen 2','id': 2,'fakultas':'Fakultas Teknik','prodi':'Teknik Sipil'},
+    'kaprodi1': {'password': 'kaprodi123','role': 'Kaprodi','name': 'Dr. Kaprodi Informatika','id': None,'fakultas':'Fakultas Teknik','prodi':'Teknik Informatika'},
+    'dekan1': {'password': 'dekan123','role': 'Dekan','name': 'Prof. Dekan Teknik','id': None,'fakultas':'Fakultas Teknik','prodi': None},
 }
 
-# ---------------- IKD calculation & utilities ----------------
+# ---------------- IKD calculation & helpers ----------------
 def hitung_kpi_dosen(perf_df):
-    total_sks = float(perf_df['mengajar_sks'].sum())  # yearly approx
+    total_sks = float(perf_df['mengajar_sks'].sum())
     total_penelitian = float(perf_df['penelitian'].sum())
     total_pengabdian = float(perf_df['pengabdian'].sum())
     total_publikasi = float(perf_df['publikasi'].sum())
@@ -166,7 +201,6 @@ def hitung_kpi_dosen(perf_df):
     skor_pengabdian = min((total_pengabdian / 2.0) * 100.0, 100.0)
     skor_publikasi = min((total_publikasi / 2.0) * 100.0, 100.0)
 
-    # Bobot default
     b_mengajar = 0.40
     b_penelitian = 0.25
     b_publikasi = 0.25
@@ -176,6 +210,7 @@ def hitung_kpi_dosen(perf_df):
            b_penelitian * skor_penelitian +
            b_publikasi * skor_publikasi +
            b_pengabdian * skor_pengabdian)
+
     components = {
         "mengajar": round(skor_mengajar,2),
         "penelitian": round(skor_penelitian,2),
@@ -215,60 +250,74 @@ def klasifikasi_ikd(ikd):
     return "Tidak Memadai", "red"
 
 def alasan_keputusan(components, ikd):
-    """
-    Build human-readable reasons for the IKD decision.
-    Rules:
-      - If a component < threshold, mention it as a reason.
-      - If all components high, say 'kinerja sangat baik'.
-    """
     reasons = []
-    # thresholds to flag items
     if components['mengajar'] < 60:
-        reasons.append(f"SKS mengajar rendah ({components['mengajar']:.0f}/100) — periksa beban dan dokumentasi pengajaran.")
+        reasons.append(f"SKS mengajar rendah ({components['mengajar']:.0f}/100) — periksa beban & dokumentasi.")
     if components['penelitian'] < 50:
         reasons.append(f"Aktivitas penelitian relatif rendah ({components['penelitian']:.0f}/100).")
     if components['publikasi'] < 50:
         reasons.append(f"Produktivitas publikasi rendah ({components['publikasi']:.0f}/100).")
     if components['pengabdian'] < 50:
-        reasons.append(f"Kegiatan pengabdian masih minim ({components['pengabdian']:.0f}/100).")
-
+        reasons.append(f"Kegiatan pengabdian minim ({components['pengabdian']:.0f}/100).")
     if not reasons:
-        reasons.append("Komponen kinerja berada pada level baik/tinggi; kandidat menunjukkan kinerja yang seimbang antara pengajaran, penelitian, publikasi, dan pengabdian.")
-    # Add overall IKD comment
+        reasons.append("Komponen kinerja baik; kinerja seimbang antara pengajaran, penelitian, publikasi, dan pengabdian.")
     if ikd >= 85:
-        reasons.append("IKD sangat tinggi — potensi untuk penghargaan/promosi.")
+        reasons.append("IKD sangat tinggi — potensi penghargaan/promosi.")
     elif ikd >= 70:
-        reasons.append("IKD berada di kisaran baik — pertahankan dan tingkatkan khususnya publikasi untuk level lebih tinggi.")
+        reasons.append("IKD berada di kisaran baik — pertahankan & tingkatkan publikasi.")
     elif ikd >= 55:
-        reasons.append("IKD cukup — perlunya perbaikan terfokus pada penelitian/publikasi atau pengabdian.")
+        reasons.append("IKD cukup — perbaikan terfokus dianjurkan.")
     else:
-        reasons.append("IKD rendah — perlu intervensi (pelatihan, pengurangan beban administratif, dukungan riset).")
-
+        reasons.append("IKD rendah — butuh intervensi (pelatihan/dukungan riset).")
     return reasons
 
 def rekomendasi_dosen_from_components(components):
     recs = []
     if components['skor_publikasi'] < 50:
-        recs.append("Ikut workshop penulisan & perencanaan publikasi, kolaborasi dengan rekan berpublikasi tinggi.")
+        recs.append("Ikuti workshop penulisan & kolaborasi riset.")
     if components['skor_penelitian'] < 50:
-        recs.append("Dorong partisipasi pada proposal penelitian & kolaborasi riset.")
+        recs.append("Dorong partisipasi pada proposal & kolaborasi penelitian.")
     if components['skor_pengabdian'] < 50:
-        recs.append("Rencanakan minimal 1 kegiatan pengabdian yang terdokumentasi tiap tahun.")
+        recs.append("Rencanakan minimal 1 kegiatan pengabdian terdokumentasi tiap tahun.")
     if components['skor_mengajar'] < 60:
-        recs.append("Review beban mengajar & tingkatkan metode pembelajaran (pelatihan pedagogik).")
+        recs.append("Review beban mengajar & tingkatkan metode pembelajaran.")
     if not recs:
-        recs.append("Pertahankan kinerja; dokumentasikan hasil untuk kenaikan karir dan penghargaan.")
+        recs.append("Pertahankan kinerja dan dokumentasikan untuk kenaikan karir.")
     return recs
 
-# ---------------- UI helpers ----------------
+# ---------------- Safe regenerate helper ----------------
+def _safe_regenerate_dummy():
+    """Regenerate dummy data safely: clear cache, remove old dataset keys, load new data."""
+    try:
+        # Clear cached function results if possible
+        try:
+            generate_dummy_data.clear()
+            hitung_ikd_semua.clear()
+        except Exception:
+            pass
+
+        # Remove dataset-related session keys only
+        keys_to_remove = ['dosen_data', 'performance_data', 'verification_queue', 'dummy_csv_paths', 'ikd_df']
+        for k in keys_to_remove:
+            if k in st.session_state:
+                del st.session_state[k]
+
+        new_seed = np.random.randint(1, 1000000)
+        load_dummy_to_session(seed=new_seed)
+        st.success(f"✅ Dummy data regenerated (seed: {new_seed}).")
+        st.experimental_rerun()
+    except Exception as e:
+        st.error(f"Gagal meregenerasi dummy data: {e}")
+        import traceback, sys
+        traceback.print_exc(file=sys.stderr)
+
+# ---------------- Sidebar common controls (use safe regenerate) ----------------
 def sidebar_common_controls():
     st.sidebar.image("https://via.placeholder.com/150x50/0b5cff/ffffff?text=UEU+DSS", use_container_width=True)
     st.sidebar.markdown("---")
     if st.sidebar.button("🔁 Regenerate Dummy Data (new seed)", use_container_width=True):
-        new_seed = np.random.randint(1, 10000)
-        load_dummy_to_session(seed=new_seed)
-        st.success("Dummy data regenerated.")
-        st.experimental_rerun()
+        _safe_regenerate_dummy()
+
     st.sidebar.markdown("### 📥 Download Dummy CSV")
     paths = st.session_state.get('dummy_csv_paths', {})
     if paths.get('dosen'):
@@ -282,6 +331,7 @@ def sidebar_common_controls():
         st.sidebar.info("CSV path tidak tersedia di environment ini.")
     st.sidebar.markdown("---")
 
+# ---------------- Login expander ----------------
 def login_area_inline():
     with st.expander("🔐 Login (Dosen / Kaprodi / Dekan)", expanded=False):
         col1, col2 = st.columns(2)
@@ -302,7 +352,45 @@ def login_area_inline():
             else:
                 st.error("Username atau password salah.")
 
-# ---------------- Rektor (public) dashboard with spider & results detail ----------------
+# ---------------- Rektor public dashboard ----------------
+def show_dosen_detail_row(row, perf_df):
+    dosen_id = int(row['id'])
+    st.markdown(f"**Nama:** {row['nama']} — **Fakultas/Prodi:** {row['fakultas']} / {row['prodi']}")
+    st.markdown(f"- **IKD:** {row['IKD']:.2f}")
+    st.markdown(f"- **Predikat:** {row.get('predikat','')}")
+    comps = {
+        'mengajar': row['skor_mengajar'],
+        'penelitian': row['skor_penelitian'],
+        'publikasi': row['skor_publikasi'],
+        'pengabdian': row['skor_pengabdian']
+    }
+    comp_df = pd.DataFrame([
+        {"Komponen":"Mengajar","Skor":comps['mengajar']},
+        {"Komponen":"Penelitian","Skor":comps['penelitian']},
+        {"Komponen":"Publikasi","Skor":comps['publikasi']},
+        {"Komponen":"Pengabdian","Skor":comps['pengabdian']}
+    ])
+    st.table(comp_df)
+    categories = ["Mengajar","Penelitian","Publikasi","Pengabdian"]
+    values = [comps['mengajar'], comps['penelitian'], comps['publikasi'], comps['pengabdian']]
+    figr = go.Figure()
+    figr.add_trace(go.Scatterpolar(r=values+[values[0]], theta=categories+[categories[0]], fill='toself', name=row['nama']))
+    figr.update_layout(polar=dict(radialaxis=dict(range=[0,100])), showlegend=False, height=360)
+    st.plotly_chart(figr, use_container_width=True)
+    reasons = alasan_keputusan(comps, row['IKD'])
+    recs = rekomendasi_dosen_from_components({
+        'skor_mengajar': comps['mengajar'],
+        'skor_penelitian': comps['penelitian'],
+        'skor_publikasi': comps['publikasi'],
+        'skor_pengabdian': comps['pengabdian']
+    })
+    st.markdown("**Alasan Keputusan:**")
+    for r in reasons:
+        st.write(f"- {r}")
+    st.markdown("**Rekomendasi:**")
+    for r in recs:
+        st.info(r)
+
 def public_rektor_dashboard():
     st.markdown("<h1 class='main-header'>🎓 Dashboard Indeks Kinerja Dosen - Universitas</h1>", unsafe_allow_html=True)
     st.markdown("<p class='sub-header'>Ringkasan Indeks Kinerja Dosen (IKD) — Tampilan Rektor (tanpa login)</p>", unsafe_allow_html=True)
@@ -311,12 +399,9 @@ def public_rektor_dashboard():
     perf_df = st.session_state.performance_data
 
     ikd_df = hitung_ikd_semua(dosen_df, perf_df)
-    # classification and color
     ikd_df[['predikat','color']] = ikd_df['IKD'].apply(lambda x: pd.Series(klasifikasi_ikd(x)))
+    st.session_state.ikd_df = ikd_df
 
-    st.session_state.ikd_df = ikd_df  # store for other pages
-
-    # Top metrics
     col1, col2, col3 = st.columns([1,1,1])
     with col1:
         st.metric("Total Dosen", len(dosen_df))
@@ -327,10 +412,7 @@ def public_rektor_dashboard():
         st.metric("Total Publikasi (2024)", int(total_pub))
 
     st.markdown("---")
-
-    # Spider chart: average components (all) and option to view by fakultas
     st.markdown("### 📡 Radar Chart — Rata-rata Komponen IKD")
-    # compute average components
     overall_avg = {
         'Mengajar': ikd_df['skor_mengajar'].mean(),
         'Penelitian': ikd_df['skor_penelitian'].mean(),
@@ -351,19 +433,15 @@ def public_rektor_dashboard():
         avg = overall_avg
 
     categories = list(avg.keys())
-    values = list(avg.values())
-    # close the loop
+    values = [0 if np.isnan(v) else v for v in avg.values()]
     values_loop = values + [values[0]]
     categories_loop = categories + [categories[0]]
-
     radar = go.Figure()
     radar.add_trace(go.Scatterpolar(r=values_loop, theta=categories_loop, fill='toself', name=f"Rata-rata ({sel_fak})"))
     radar.update_layout(polar=dict(radialaxis=dict(range=[0,100])), showlegend=True, height=420)
     st.plotly_chart(radar, use_container_width=True)
 
     st.markdown("---")
-
-    # Top 10 table
     st.markdown("### 🏆 Top 10 Dosen (IKD)")
     top10 = ikd_df.sort_values('IKD', ascending=False).head(10)
     top10_display = top10[['nama','fakultas','prodi','IKD','predikat']].copy()
@@ -371,76 +449,24 @@ def public_rektor_dashboard():
     st.table(top10_display.reset_index(drop=True))
 
     st.markdown("---")
-
-    # Hasil Penilaian Dosen - full table with detail expandable
     st.markdown("### 🧾 Hasil Penilaian Dosen (Semua)")
     display_df = ikd_df[['id','nama','fakultas','prodi','IKD','predikat']].sort_values('IKD', ascending=False).reset_index(drop=True)
     display_df['IKD'] = display_df['IKD'].round(2)
-    # show paginated-ish table
     st.dataframe(display_df, use_container_width=True)
 
     st.markdown("#### Detail & Alasan Keputusan")
-    # allow selecting a specific dosen or list expanders below
     select_mode = st.radio("Lihat detail:", ["Pilih Dosen", "Tampilkan Semua Detail (expander)"], index=0, horizontal=True)
-
     if select_mode == "Pilih Dosen":
         sel_name = st.selectbox("Pilih Dosen:", display_df['nama'].tolist())
         row = ikd_df[ikd_df['nama'] == sel_name].iloc[0]
-        show_dosen_detail_row(row, st.session_state.performance_data)
+        show_dosen_detail_row(row, perf_df)
     else:
         for _, row in ikd_df.sort_values('IKD', ascending=False).iterrows():
             with st.expander(f"{row['nama']} — IKD: {row['IKD']:.2f} — {row.get('predikat','')}"):
-                show_dosen_detail_row(row, st.session_state.performance_data)
+                show_dosen_detail_row(row, perf_df)
 
     st.markdown("---")
-    st.markdown("**Catatan:** Alasan keputusan dan rekomendasi bersifat otomatis (aturan dasar). Silakan tinjau dan sesuaikan kebijakan bobot/threshold pada modul IKD untuk kebutuhan institusi.")
-
-def show_dosen_detail_row(row, perf_df):
-    """
-    Render detail for single dosen row (from ikd_df).
-    row: Series with fields id,nama,fakultas,prodi,IKD, skor_*
-    """
-    dosen_id = int(row['id'])
-    st.markdown(f"**Nama:** {row['nama']} — **Fakultas/Prodi:** {row['fakultas']} / {row['prodi']}")
-    st.markdown(f"- **IKD:** {row['IKD']:.2f}")
-    st.markdown(f"- **Predikat:** {row.get('predikat','')}")
-    comps = {
-        'mengajar': row['skor_mengajar'],
-        'penelitian': row['skor_penelitian'],
-        'publikasi': row['skor_publikasi'],
-        'pengabdian': row['skor_pengabdian']
-    }
-    # component table
-    comp_df = pd.DataFrame([
-        {"Komponen":"Mengajar","Skor":comps['mengajar']},
-        {"Komponen":"Penelitian","Skor":comps['penelitian']},
-        {"Komponen":"Publikasi","Skor":comps['publikasi']},
-        {"Komponen":"Pengabdian","Skor":comps['pengabdian']}
-    ])
-    st.table(comp_df)
-
-    # radar per dosen
-    categories = ["Mengajar","Penelitian","Publikasi","Pengabdian"]
-    values = [comps['mengajar'], comps['penelitian'], comps['publikasi'], comps['pengabdian']]
-    figr = go.Figure()
-    figr.add_trace(go.Scatterpolar(r=values+[values[0]], theta=categories+[categories[0]], fill='toself', name=row['nama']))
-    figr.update_layout(polar=dict(radialaxis=dict(range=[0,100])), showlegend=False, height=360)
-    st.plotly_chart(figr, use_container_width=True)
-
-    # reasons & recommendations
-    reasons = alasan_keputusan(comps, row['IKD'])
-    recs = rekomendasi_dosen_from_components({
-        'skor_mengajar': comps['mengajar'],
-        'skor_penelitian': comps['penelitian'],
-        'skor_publikasi': comps['publikasi'],
-        'skor_pengabdian': comps['pengabdian']
-    })
-    st.markdown("**Alasan Keputusan:**")
-    for r in reasons:
-        st.write(f"- {r}")
-    st.markdown("**Rekomendasi:**")
-    for r in recs:
-        st.info(r)
+    st.markdown("**Catatan:** Alasan & rekomendasi bersifat otomatis. Sesuaikan bobot & threshold jika diperlukan.")
 
 # ---------------- Other pages (logged-in) ----------------
 def sidebar_navigation_logged_in():
@@ -468,7 +494,6 @@ def dosen_dashboard():
         return
     dosen_info = dosen_df[dosen_df['id'] == st.session_state.user_id].iloc[0]
     perf = perf_df[perf_df['dosen_id'] == st.session_state.user_id]
-
     st.markdown(f"## 📊 Dashboard Kinerja — {dosen_info['nama']}")
     ikd, comps = hitung_kpi_dosen(perf)
     predikat, _ = klasifikasi_ikd(ikd)
@@ -496,25 +521,19 @@ def dosen_dashboard():
 def dosen_input_kinerja():
     st.markdown("## 📝 Input Kinerja Tridharma")
     st.info("Form input (demo) — data tidak tersimpan permanen pada versi demo ini.")
-    # simplified forms (no persistence)
     tab1,tab2,tab3,tab4 = st.tabs(["Pengajaran","Penelitian","Pengabdian","Publikasi"])
     with tab1:
-        st.text_input("Nama Mata Kuliah")
-        st.number_input("SKS", min_value=1, max_value=6, value=3)
-        if st.button("Simpan Pengajaran"):
-            st.success("Data pengajaran disimpan (demo).")
+        st.text_input("Nama Mata Kuliah"); st.number_input("SKS", min_value=1, max_value=6, value=3)
+        if st.button("Simpan Pengajaran"): st.success("Data pengajaran disimpan (demo).")
     with tab2:
         st.text_input("Judul Penelitian")
-        if st.button("Simpan Penelitian"):
-            st.success("Data penelitian disimpan (demo).")
+        if st.button("Simpan Penelitian"): st.success("Data penelitian disimpan (demo).")
     with tab3:
         st.text_input("Judul Pengabdian")
-        if st.button("Simpan Pengabdian"):
-            st.success("Data pengabdian disimpan (demo).")
+        if st.button("Simpan Pengabdian"): st.success("Data pengabdian disimpan (demo).")
     with tab4:
         st.text_input("Judul Publikasi")
-        if st.button("Simpan Publikasi"):
-            st.success("Data publikasi disimpan (demo).")
+        if st.button("Simpan Publikasi"): st.success("Data publikasi disimpan (demo).")
 
 def dosen_riwayat_penilaian():
     st.markdown("## 📜 Riwayat Penilaian Kinerja")
@@ -536,8 +555,7 @@ def verification_page():
     pending = verification_queue[verification_queue['status']=='Pending']
     st.write(f"Total Antrian: {len(verification_queue)}  |  Pending: {len(pending)}")
     if len(pending)==0:
-        st.success("Tidak ada item pending.")
-        return
+        st.success("Tidak ada item pending."); return
     for _, row in pending.iterrows():
         dosen_row = dosen_df[dosen_df['id'] == row['dosen_id']].iloc[0]
         with st.expander(f"#{row['id']} — {row['jenis']} — {row['judul']} ({dosen_row['nama']})"):
@@ -562,9 +580,12 @@ def kaprodi_dashboard():
     prodi_df = ikd_df[ikd_df['prodi'] == prodi]
     st.markdown(f"## 📊 Dashboard Kaprodi — {prodi}")
     st.metric("Jumlah Dosen", len(prodi_df))
-    st.metric("Rata-rata IKD", f"{prodi_df['IKD'].mean():.2f}")
+    st.metric("Rata-rata IKD", f"{prodi_df['IKD'].mean():.2f}" if len(prodi_df)>0 else "N/A")
     st.markdown("### Ranking IKD Prodi")
-    st.table(prodi_df.sort_values('IKD', ascending=False)[['nama','IKD','predikat']].reset_index(drop=True))
+    if len(prodi_df)>0:
+        st.table(prodi_df.sort_values('IKD', ascending=False)[['nama','IKD','predikat']].reset_index(drop=True))
+    else:
+        st.info("Tidak ada data untuk prodi ini.")
 
 def dekan_dashboard():
     fak = st.session_state.fakultas
@@ -574,22 +595,22 @@ def dekan_dashboard():
     fak_df = ikd_df[ikd_df['fakultas'] == fak]
     st.markdown(f"## 📊 Dashboard Dekan — {fak}")
     st.metric("Jumlah Dosen (Fakultas)", len(fak_df))
-    st.metric("Rata-rata IKD (Fakultas)", f"{fak_df['IKD'].mean():.2f}")
+    st.metric("Rata-rata IKD (Fakultas)", f"{fak_df['IKD'].mean():.2f}" if len(fak_df)>0 else "N/A")
     st.markdown("### Rata-rata IKD per Prodi")
-    st.table(fak_df.groupby('prodi')['IKD'].mean().reset_index().sort_values('IKD', ascending=False))
+    if len(fak_df)>0:
+        st.table(fak_df.groupby('prodi')['IKD'].mean().reset_index().sort_values('IKD', ascending=False))
+    else:
+        st.info("Tidak ada data untuk fakultas ini.")
 
 # ---------------- Main ----------------
 def main():
-    # public rektor view when not logged in
     if not st.session_state.logged_in:
         sidebar_common_controls()
         public_rektor_dashboard()
         login_area_inline()
         return
 
-    # logged in
     sidebar_common_controls()
-    st.sidebar.image("https://via.placeholder.com/150x50/0b5cff/ffffff?text=UEU+DSS", use_container_width=True)
     if st.session_state.user_role:
         st.sidebar.markdown(f"### 👤 {st.session_state.user_name}")
         st.sidebar.markdown(f"**Role:** {st.session_state.user_role}")
@@ -598,6 +619,7 @@ def main():
         if st.session_state.prodi:
             st.sidebar.markdown(f"**Prodi:** {st.session_state.prodi}")
         st.sidebar.markdown("---")
+
     selected_menu = sidebar_navigation_logged_in()
     role = st.session_state.user_role
 
