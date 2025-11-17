@@ -1,0 +1,6 @@
+streamlit
+pandas
+numpy
+plotly
+openpyxl    # untuk export ke Excel
+xlsxwriter  # alternatif untuk export ke Excel
